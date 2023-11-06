@@ -1,6 +1,7 @@
 package com.kernel360.orury.config.jwt;
 
 import com.kernel360.orury.global.message.errors.ErrorMessages;
+
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -28,14 +29,19 @@ public class TokenProvider implements InitializingBean {
 	private final Logger logger = LoggerFactory.getLogger(TokenProvider.class);
 	private static final String AUTHORITIES_KEY = "auth";
 	private final String secret;
-	private final long tokenValidityInMilliseconds;
+	private final long expirationMinutes;
+	private final long refreshExpirationHours;
+
 	private Key key;
 
 	public TokenProvider(
 		@Value("${jwt.secret}") String secret,
-		@Value("${jwt.token-validity-in-seconds}") long tokenValidityInSeconds) {
+		@Value("${jwt.expiration-minutes}") long expirationMinutes,
+		@Value("${jwt.refresh-expiration-hours}") long refreshExpirationHours
+	) {
 		this.secret = secret;
-		this.tokenValidityInMilliseconds = tokenValidityInSeconds * 1000;
+		this.expirationMinutes = expirationMinutes;
+		this.refreshExpirationHours = refreshExpirationHours;
 	}
 
 	// 빈이 생성되고 생성자에서 주입받은 jwt 시크릿 키를 base65 디코드해서 key 변수에 할당
@@ -46,17 +52,27 @@ public class TokenProvider implements InitializingBean {
 	}
 
 	// Authentication을 파라미터로 받아서 권한들을 가져온다, yml 파일에 설정한 만료시간을 설정하고 토큰을 생성한다
-	public String createToken(Authentication authentication) {
+	public String createAccessToken(Authentication authentication) {
 		String authorities = authentication.getAuthorities().stream()
 			.map(GrantedAuthority::getAuthority)
 			.collect(Collectors.joining(","));
 
 		long now = (new Date()).getTime();
-		Date validity = new Date(now + this.tokenValidityInMilliseconds);
+		Date validity = new Date(now + this.expirationMinutes);
 
 		return Jwts.builder()
 			.setSubject(authentication.getName())
 			.claim(AUTHORITIES_KEY, authorities)
+			.signWith(key, SignatureAlgorithm.HS512)
+			.setExpiration(validity)
+			.compact();
+	}
+
+	public String createRefreshToken() {
+		long now = (new Date()).getTime();
+		Date validity = new Date(now + this.refreshExpirationHours);
+
+		return Jwts.builder()
 			.signWith(key, SignatureAlgorithm.HS512)
 			.setExpiration(validity)
 			.compact();

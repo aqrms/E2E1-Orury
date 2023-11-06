@@ -10,6 +10,7 @@ import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.JoinTable;
 import javax.persistence.ManyToMany;
+import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
 import org.springframework.data.annotation.LastModifiedDate;
@@ -70,7 +71,7 @@ public class UserEntity extends BaseEntity {
 		inverseJoinColumns = @JoinColumn(name = "authority_name", referencedColumnName = "name"),
 		foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT),
 		inverseForeignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT)
-)
+	)
 	private Set<AuthorityEntity> authorities;
 
 }

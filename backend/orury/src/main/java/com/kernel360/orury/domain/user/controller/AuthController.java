@@ -1,5 +1,7 @@
 package com.kernel360.orury.domain.user.controller;
 
+import static org.springframework.data.util.Optionals.*;
+
 import javax.validation.Valid;
 
 import org.springframework.http.HttpHeaders;
@@ -21,22 +23,24 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kernel360.orury.config.jwt.JwtFilter;
 import com.kernel360.orury.config.jwt.TokenProvider;
+import com.kernel360.orury.domain.user.db.RefreshTokenEntity;
+import com.kernel360.orury.domain.user.db.RefreshTokenRepository;
+import com.kernel360.orury.domain.user.db.UserEntity;
 import com.kernel360.orury.domain.user.db.UserRepository;
+import com.kernel360.orury.domain.user.exception.NotFoundMemberException;
 import com.kernel360.orury.domain.user.model.LoginDto;
 import com.kernel360.orury.domain.user.model.TokenDto;
 
 import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 	private final TokenProvider tokenProvider;
 	private final AuthenticationManagerBuilder authenticationManagerBuilder;
-
-	public AuthController(TokenProvider tokenProvider, AuthenticationManagerBuilder authenticationManagerBuilder) {
-		this.tokenProvider = tokenProvider;
-		this.authenticationManagerBuilder = authenticationManagerBuilder;
-	}
+	private final RefreshTokenRepository refreshTokenRepository;
+	private final UserRepository userRepository;
 
 	@PostMapping("/authenticate")
 	public ResponseEntity<TokenDto> authenticate(@Valid @RequestBody LoginDto loginDto) {
@@ -49,6 +53,15 @@ public class AuthController {
 
 		String accessToken = tokenProvider.createAccessToken(authentication);
 		String refreshToken = tokenProvider.createRefreshToken();
+
+		UserEntity userEntity = userRepository.findByEmailAddr(authentication.getName())
+			.orElseThrow(() -> new NotFoundMemberException("User not found with email: " + authentication.getName()));
+
+		refreshTokenRepository.findById(userEntity.getId())
+			.ifPresentOrElse(
+				it -> it.updateRefreshToken(refreshToken),
+				() -> refreshTokenRepository.save(new RefreshTokenEntity(userEntity, refreshToken))
+			);
 
 		HttpHeaders httpHeaders = new HttpHeaders();
 		httpHeaders.setContentType(MediaType.APPLICATION_JSON);

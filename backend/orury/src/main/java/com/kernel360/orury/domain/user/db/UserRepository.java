@@ -6,9 +6,12 @@ import javax.swing.text.html.Option;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.security.core.userdetails.User;
 
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
 	@EntityGraph(attributePaths = "authorities")
 	Optional<UserEntity> findOneWithAuthoritiesByEmailAddr(String username);
+
+	Optional<UserEntity> findByEmailAddr(String username);
 }

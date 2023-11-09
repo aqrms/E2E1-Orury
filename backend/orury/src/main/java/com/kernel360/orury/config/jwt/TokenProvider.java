@@ -1,5 +1,7 @@
 package com.kernel360.orury.config.jwt;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kernel360.orury.domain.user.service.CustomUserDetails;
 import com.kernel360.orury.global.message.errors.ErrorMessages;
 
@@ -18,10 +20,13 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
@@ -33,6 +38,7 @@ public class TokenProvider implements InitializingBean {
 	private final String secret;
 	private final long expirationMinutes;
 	private final long refreshExpirationHours;
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	private Key key;
 
@@ -42,8 +48,8 @@ public class TokenProvider implements InitializingBean {
 		@Value("${jwt.refresh-expiration-hours}") long refreshExpirationHours
 	) {
 		this.secret = secret;
-		this.expirationMinutes = expirationMinutes;
-		this.refreshExpirationHours = refreshExpirationHours;
+		this.expirationMinutes = expirationMinutes * 1000;
+		this.refreshExpirationHours = refreshExpirationHours * 60 * 1000;
 	}
 
 	// 빈이 생성되고 생성자에서 주입받은 jwt 시크릿 키를 base65 디코드해서 key 변수에 할당
@@ -113,14 +119,47 @@ public class TokenProvider implements InitializingBean {
 			return true;
 		} catch (io.jsonwebtoken.security.SecurityException | MalformedJwtException e) {
 			logger.info(ErrorMessages.MALFORMED_JWT.getMessage());
+			throw new MalformedJwtException("올바르지 않은 토큰입니다.");
 		} catch (ExpiredJwtException e) {
 			logger.info(ErrorMessages.EXPIRED_JWT.getMessage());
+			throw new ExpiredJwtException(null, null, "토큰이 만료되었습니다. 다시 로그인해주세요.");
 		} catch (UnsupportedJwtException e) {
 			logger.info(ErrorMessages.UNSUPPORTED_JWT.getMessage());
+			throw new UnsupportedJwtException("지원하지 않는 토큰입니다.");
 		} catch (IllegalArgumentException e) {
 			logger.info(ErrorMessages.ILLEGAL_ARGUMENT_JWT.getMessage());
+			throw new IllegalArgumentException("토큰이 빈 값입니다.");
 		}
-		return false;
+	}
+
+	public String recreateAccessToken(String expiredToken) throws JsonProcessingException {
+		Map<String, Object> payload = objectMapper.readValue(
+			new String(Base64.getDecoder().decode(expiredToken.split("\\.")[1]), StandardCharsets.UTF_8),
+			Map.class
+		);
+
+		Collection<? extends GrantedAuthority> authorities =
+			Arrays.stream(payload.get(AUTHORITIES_KEY).toString().split(","))
+				.map(SimpleGrantedAuthority::new)
+				.collect(Collectors.toList());
+
+		Long id = Long.parseLong(payload.get("id").toString());
+		String username = payload.get("sub").toString();
+		String password = "";
+
+		CustomUserDetails principal = new CustomUserDetails(username, password, id, authorities);
+
+		Authentication authentication = new UsernamePasswordAuthenticationToken(principal, "", authorities);
+
+		return createAccessToken(authentication);
+	}
+
+	public Claims extractAllClaims(String token) throws
+		UnsupportedJwtException,
+		MalformedJwtException,
+		SignatureException,
+		IllegalArgumentException {
+		return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJwt(token).getBody();
 	}
 
 }

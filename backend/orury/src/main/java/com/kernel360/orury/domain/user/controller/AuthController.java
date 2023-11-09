@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -42,6 +43,7 @@ public class AuthController {
 	private final RefreshTokenRepository refreshTokenRepository;
 	private final UserRepository userRepository;
 
+	@Transactional
 	@PostMapping("/authenticate")
 	public ResponseEntity<TokenDto> authenticate(@Valid @RequestBody LoginDto loginDto) {
 
@@ -52,7 +54,7 @@ public class AuthController {
 		SecurityContextHolder.getContext().setAuthentication(authentication);
 
 		String accessToken = tokenProvider.createAccessToken(authentication);
-		String refreshToken = tokenProvider.createRefreshToken();
+		String refreshToken = tokenProvider.createRefreshToken(authentication);
 
 		UserEntity userEntity = userRepository.findByEmailAddr(authentication.getName())
 			.orElseThrow(() -> new NotFoundMemberException("User not found with email: " + authentication.getName()));

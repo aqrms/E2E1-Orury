@@ -1,5 +1,6 @@
 package com.kernel360.orury.config.jwt;
 
+import com.kernel360.orury.domain.user.service.CustomUserDetails;
 import com.kernel360.orury.global.message.errors.ErrorMessages;
 
 import io.jsonwebtoken.*;
@@ -28,6 +29,7 @@ public class TokenProvider implements InitializingBean {
 
 	private final Logger logger = LoggerFactory.getLogger(TokenProvider.class);
 	private static final String AUTHORITIES_KEY = "auth";
+	private static final String USER_ID_KEY = "id";
 	private final String secret;
 	private final long expirationMinutes;
 	private final long refreshExpirationHours;
@@ -60,19 +62,27 @@ public class TokenProvider implements InitializingBean {
 		long now = (new Date()).getTime();
 		Date validity = new Date(now + this.expirationMinutes);
 
+		CustomUserDetails principal = (CustomUserDetails)authentication.getPrincipal();
+		Long userId = principal.getId();
+
 		return Jwts.builder()
 			.setSubject(authentication.getName())
 			.claim(AUTHORITIES_KEY, authorities)
+			.claim(USER_ID_KEY, userId)
 			.signWith(key, SignatureAlgorithm.HS512)
 			.setExpiration(validity)
 			.compact();
 	}
 
-	public String createRefreshToken() {
+	public String createRefreshToken(Authentication authentication) {
+		CustomUserDetails principal = (CustomUserDetails)authentication.getPrincipal();
+		Long userId = principal.getId();
+
 		long now = (new Date()).getTime();
 		Date validity = new Date(now + this.refreshExpirationHours);
 
 		return Jwts.builder()
+			.setSubject(userId.toString())  // 사용자 아이디를 서브젝트로 설정
 			.signWith(key, SignatureAlgorithm.HS512)
 			.setExpiration(validity)
 			.compact();
@@ -112,4 +122,5 @@ public class TokenProvider implements InitializingBean {
 		}
 		return false;
 	}
+
 }

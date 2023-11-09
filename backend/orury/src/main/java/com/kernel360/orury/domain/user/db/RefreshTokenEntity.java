@@ -24,7 +24,7 @@ public class RefreshTokenEntity {
 	@JoinColumn(name = "user_id")
 	private UserEntity user;
 	private String refreshToken;
-	private int reissueCount = 0;
+	private long reissueCount = 0;
 
 	public RefreshTokenEntity(UserEntity user, String refreshToken) {
 		this.user = user;

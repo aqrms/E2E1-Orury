@@ -2,8 +2,11 @@ package com.kernel360.orury.domain.user.controller;
 
 import static org.springframework.data.util.Optionals.*;
 
+import java.util.stream.Collectors;
+
 import javax.validation.Valid;
 
+import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -13,7 +16,10 @@ import org.springframework.security.config.annotation.authentication.builders.Au
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kernel360.orury.config.jwt.JwtFilter;
 import com.kernel360.orury.config.jwt.TokenProvider;
+import com.kernel360.orury.domain.user.db.AuthorityEntity;
 import com.kernel360.orury.domain.user.db.RefreshTokenEntity;
 import com.kernel360.orury.domain.user.db.RefreshTokenRepository;
 import com.kernel360.orury.domain.user.db.UserEntity;
@@ -41,7 +48,9 @@ public class AuthController {
 	private final AuthenticationManagerBuilder authenticationManagerBuilder;
 	private final RefreshTokenRepository refreshTokenRepository;
 	private final UserRepository userRepository;
+	private final PasswordEncoder encoder;
 
+	@Transactional
 	@PostMapping("/authenticate")
 	public ResponseEntity<TokenDto> authenticate(@Valid @RequestBody LoginDto loginDto) {
 

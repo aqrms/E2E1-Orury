@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.kernel360.orury.global.message.errors.ErrorMessages;
+
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -31,7 +32,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 			.orElseThrow(() -> new UsernameNotFoundException(emailAddr + ErrorMessages.NOT_EXIST_USER_EMAIL));
 	}
 
-	private org.springframework.security.core.userdetails.User createUser(String emailAddr, UserEntity user) {
+	private UserDetails createUser(String emailAddr, UserEntity user) {
 		if (!user.isActivated()) {
 			throw new RuntimeException(emailAddr + ErrorMessages.NOT_ACTIVATED);
 		}
@@ -40,8 +41,9 @@ public class CustomUserDetailsService implements UserDetailsService {
 			.map(authority -> new SimpleGrantedAuthority(authority.getName()))
 			.collect(Collectors.toList());
 
-		return new org.springframework.security.core.userdetails.User(user.getEmailAddr(),
+		return new CustomUserDetails(user.getEmailAddr(),
 			user.getPassword(),
+			user.getId(),
 			grantedAuthorities);
 	}
 }

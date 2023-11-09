@@ -1,5 +1,11 @@
 package com.kernel360.orury.config.jwt;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kernel360.orury.domain.user.db.RefreshTokenEntity;
+import com.kernel360.orury.domain.user.db.RefreshTokenRepository;
+import com.kernel360.orury.domain.user.db.UserEntity;
+import com.kernel360.orury.domain.user.service.CustomUserDetails;
 import com.kernel360.orury.global.message.errors.ErrorMessages;
 
 import io.jsonwebtoken.*;
@@ -14,13 +20,19 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -28,23 +40,28 @@ public class TokenProvider implements InitializingBean {
 
 	private final Logger logger = LoggerFactory.getLogger(TokenProvider.class);
 	private static final String AUTHORITIES_KEY = "auth";
+	private static final String SUBJECT_ID = "id";
 	private final String secret;
 	private final long expirationMinutes;
 	private final long refreshExpirationHours;
-
 	private Key key;
+	private final ObjectMapper objectMapper = new ObjectMapper();
+	private final RefreshTokenRepository refreshTokenRepository;
+	private final long reissueLimit;
 
 	public TokenProvider(
 		@Value("${jwt.secret}") String secret,
 		@Value("${jwt.expiration-minutes}") long expirationMinutes,
-		@Value("${jwt.refresh-expiration-hours}") long refreshExpirationHours
-	) {
+		@Value("${jwt.refresh-expiration-hours}") long refreshExpirationHours,
+		RefreshTokenRepository refreshTokenRepository) {
 		this.secret = secret;
-		this.expirationMinutes = expirationMinutes;
-		this.refreshExpirationHours = refreshExpirationHours;
+		this.expirationMinutes = expirationMinutes * 1000;
+		this.refreshExpirationHours = refreshExpirationHours * 60 * 60 * 1000;
+		this.refreshTokenRepository = refreshTokenRepository;
+		reissueLimit = refreshExpirationHours * 60 / expirationMinutes;
 	}
 
-	// 빈이 생성되고 생성자에서 주입받은 jwt 시크릿 키를 base65 디코드해서 key 변수에 할당
+	// 빈이 생성되고 생성자에서 주입받은 jwt 시크릿 키를 base64 디코드해서 key 변수에 할당
 	@Override
 	public void afterPropertiesSet() {
 		byte[] keyBytes = Decoders.BASE64.decode(secret);
@@ -111,5 +128,51 @@ public class TokenProvider implements InitializingBean {
 			logger.info(ErrorMessages.ILLEGAL_ARGUMENT_JWT.getMessage());
 		}
 		return false;
+	}
+
+	public String validateTokenAndGetSubject(String token) {
+		return validateAndParseToken(token)
+			.getBody()
+			.getSubject();
+	}
+
+	@Transactional
+	public String recreateAccessToken(String oldAccessToken) throws JsonProcessingException {
+		String subject = decodeJwtPayloadSubject(oldAccessToken).split(":")[0];
+		refreshTokenRepository.findByUserIdAndReissueCountLessThan(Long.valueOf(subject.split(":")[0]), reissueLimit)
+			.ifPresentOrElse(
+				RefreshTokenEntity::increaseReissueCount,
+				() -> {
+					throw new ExpiredJwtException(null, null, "Refresh token expired.");
+				}
+			);
+		return createAccessToken(subject);
+	}
+
+	@Transactional(readOnly = true)
+	public void validateRefreshToken(String refreshToken, String oldAccessToken) throws JsonProcessingException {
+		validateAndParseToken(refreshToken);
+		String id = decodeJwtPayloadSubject(oldAccessToken).split(":")[0];
+		refreshTokenRepository.findByUserIdAndReissueCountLessThan(Long.parseLong(id), reissueLimit)
+			.filter(memberRefreshToken -> memberRefreshToken.validateRefreshToken(refreshToken))
+			.orElseThrow(() -> new ExpiredJwtException(null, null, "Refresh token expired."));
+	}
+
+	private Jws<Claims> validateAndParseToken(String token) {
+		return Jwts.parserBuilder()
+			.setSigningKey(key)
+			.build()
+			.parseClaimsJws(token);
+	}
+
+	public Claims getClaimsFromToken(String token) {
+		return Jwts.parser().setSigningKey(secret).parseClaimsJws(token).getBody();
+	}
+
+	private String decodeJwtPayloadSubject(String oldAccessToken) throws JsonProcessingException {
+		return objectMapper.readValue(
+			new String(Base64.getDecoder().decode(oldAccessToken.split("\\.")[1]), StandardCharsets.UTF_8),
+			Map.class
+		).get("sub").toString();
 	}
 }

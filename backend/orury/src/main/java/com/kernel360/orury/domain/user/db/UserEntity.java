@@ -3,6 +3,7 @@ package com.kernel360.orury.domain.user.db;
 import javax.persistence.Column;
 import javax.persistence.ConstraintMode;
 import javax.persistence.Entity;
+import javax.persistence.FetchType;
 import javax.persistence.ForeignKey;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
@@ -64,7 +65,7 @@ public class UserEntity extends BaseEntity {
 	private String remark2;
 	private String remark3;
 
-	@ManyToMany
+	@ManyToMany(fetch = FetchType.EAGER)
 	@JoinTable(
 		name = "user_authority",
 		joinColumns = @JoinColumn(name = "user_id", referencedColumnName = "id"),

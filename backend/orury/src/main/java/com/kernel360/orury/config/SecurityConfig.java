@@ -12,11 +12,14 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
+
+import lombok.RequiredArgsConstructor;
 
 /**
  author : aqrms
@@ -24,30 +27,18 @@ import java.util.List;
  description : @EnableMethodSecurity는 추후 컨트롤러에서 API메서드 단위로 권한을 적용(@PreAuthorize)하기 위함
  */
 @EnableMethodSecurity(prePostEnabled = true)
+@RequiredArgsConstructor
 @Configuration
 public class SecurityConfig {
 
 	private static final List<String> SWAGGER = List.of(
-			"/swagger-ui.html",
-			"/swagger-ui/**",
-			"/v3/api-docs/**"
+		"/swagger-ui.html",
+		"/swagger-ui/**",
+		"/v3/api-docs/**"
 	);
 	private final TokenProvider tokenProvider;
 	private final CorsFilter corsFilter;
-	private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-	private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
-
-	public SecurityConfig(
-		TokenProvider tokenProvider,
-		CorsFilter corsFilter,
-		JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
-		JwtAccessDeniedHandler jwtAccessDeniedHandler
-	) {
-		this.tokenProvider = tokenProvider;
-		this.corsFilter = corsFilter;
-		this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
-		this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
-	}
+	private final AuthenticationEntryPoint entryPoint;
 
 	@Bean
 	public PasswordEncoder passwordEncoder() {
@@ -61,10 +52,6 @@ public class SecurityConfig {
 			.csrf(csrf -> csrf.disable())
 
 			.addFilterBefore(corsFilter, UsernamePasswordAuthenticationFilter.class)
-			.exceptionHandling(exceptionHandling -> exceptionHandling
-				.accessDeniedHandler(jwtAccessDeniedHandler)
-				.authenticationEntryPoint(jwtAuthenticationEntryPoint)
-			)
 
 			.authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
 				.mvcMatchers(SWAGGER.toArray(new String[0])).permitAll()
@@ -76,6 +63,7 @@ public class SecurityConfig {
 			.sessionManagement(sessionManagement ->
 				sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
 			)
+			.exceptionHandling(handler -> handler.authenticationEntryPoint(entryPoint))
 			// JWT필터 적용
 			.apply(new JwtSecurityConfig(tokenProvider));
 		return http.build();
